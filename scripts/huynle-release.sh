@@ -67,7 +67,15 @@ git archive --format=tar --prefix="chezmoi-$version/" "$commit" | gzip -n > "$ou
 (
 	cd "$output_dir"
 	sha256sum chezmoi-* > SHA256SUMS
-	find dl/chezmoi -type f ! -name SHA256SUMS -print | LC_ALL=C sort | xargs sha256sum > dl/chezmoi/SHA256SUMS
+	: > dl/chezmoi/SHA256SUMS
+	for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+		os=${target%/*}
+		arch=${target#*/}
+		ext=
+		[ "$os" = windows ] && ext=.exe
+		digest=$(sha256sum "dl/chezmoi/$target" | cut -d ' ' -f 1)
+		printf '%s  chezmoi-%s-%s%s\n' "$digest" "$os" "$arch" "$ext" >> dl/chezmoi/SHA256SUMS
+	done
 )
 
 cat > "$output_dir/manifest.json" <<EOF

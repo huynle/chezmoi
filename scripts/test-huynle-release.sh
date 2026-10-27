@@ -31,9 +31,15 @@ grep -q '"windows/arm64"' "$tmp/one/manifest.json"
 test -f "$tmp/one/dl/chezmoi/SHA256SUMS"
 test -f "$tmp/one/dl/chezmoi/linux/amd64"
 test -f "$tmp/one/dl/chezmoi/windows/arm64"
-(cd "$tmp/one" && sha256sum -c dl/chezmoi/SHA256SUMS)
-grep -q '  dl/chezmoi/linux/amd64$' "$tmp/one/dl/chezmoi/SHA256SUMS"
-grep -q '  dl/chezmoi/windows/arm64$' "$tmp/one/dl/chezmoi/SHA256SUMS"
+grep -q '  chezmoi-linux-amd64$' "$tmp/one/dl/chezmoi/SHA256SUMS"
+grep -q '  chezmoi-windows-arm64.exe$' "$tmp/one/dl/chezmoi/SHA256SUMS"
+while read -r digest name; do
+	target=${name#chezmoi-}
+	os=${target%%-*}
+	arch=${target#*-}
+	arch=${arch%.exe}
+	test "$(sha256sum "$tmp/one/dl/chezmoi/$os/$arch" | cut -d ' ' -f 1)" = "$digest"
+done < "$tmp/one/dl/chezmoi/SHA256SUMS"
 
 minisign -G -W -p "$tmp/test.pub" -s "$tmp/test.key" >/dev/null 2>&1
 pubkey=$(tail -n 1 "$tmp/test.pub")
