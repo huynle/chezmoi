@@ -38,6 +38,11 @@ jobs:
       - name: Test and build release assets
         run: |
           set -eu
+          # issue3126.txtar greps rendered template data for "foo" and "bar";
+          # pin the kernel hostname so host metadata cannot cause a false match.
+          old_hostname=$(hostname)
+          sudo hostname chezmoi-ci
+          sudo sed -i "s/$old_hostname/chezmoi-ci/g" /etc/hosts /etc/hostname
           go test ./...
           epoch=$(git show -s --format=%ct "$GITHUB_SHA")
           scripts/huynle-release.sh build "$GITHUB_REF_NAME" "$GITHUB_SHA" "$epoch" dist
@@ -77,7 +82,7 @@ jobs:
           minisign -R -s "$key" -p "$RUNNER_TEMP/derived.pub" < /dev/null >/dev/null
           test "$(tail -n 1 "$RUNNER_TEMP/derived.pub")" = "$RELEASE_PUBKEY"
           printf 'untrusted comment: fleet release public key\n%s\n' "$RELEASE_PUBKEY" > dist/release.pub
-          for file in dist/*; do
+          find dist -type f ! -name '*.minisig' -print | LC_ALL=C sort | while IFS= read -r file; do
             minisign -S -s "$key" -m "$file" -t "chezmoi $VERSION $(basename "$file")" < /dev/null
             minisign -V -q -P "$RELEASE_PUBKEY" -m "$file"
           done
@@ -107,5 +112,6 @@ jobs:
           set -eu
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "chezmoi $VERSION" \
-            --notes "Huynle fleet build from source. Verify SHA256SUMS and all .minisig files with release.pub." \
-            dist/*
+            --notes "Huynle fleet build from source. GitHub assets are for review; fleet-server publishes the signed dist/dl/chezmoi tree at /dl/chezmoi/. Verify SHA256SUMS and all .minisig files with release.pub." \
+            dist/chezmoi-* dist/manifest.json dist/manifest.json.minisig \
+            dist/release.pub dist/release.pub.minisig dist/SHA256SUMS dist/SHA256SUMS.minisig

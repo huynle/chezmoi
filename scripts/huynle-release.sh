@@ -55,6 +55,8 @@ for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 wi
 	cp LICENSE README.md "$stage/"
 	TZ=UTC find "$stage" -exec touch -h -d "@$source_date_epoch" {} +
 	cp "$stage/chezmoi$ext" "$output_dir/$name$ext"
+	mkdir -p "$output_dir/dl/chezmoi/$os"
+	cp "$stage/chezmoi$ext" "$output_dir/dl/chezmoi/$os/$arch"
 	tar --sort=name --mtime="@$source_date_epoch" --owner=0 --group=0 --numeric-owner \
 		-C "$stage" -cf - . | gzip -n > "$output_dir/$name.tar.gz"
 	rm -rf "$stage"
@@ -65,6 +67,7 @@ git archive --format=tar --prefix="chezmoi-$version/" "$commit" | gzip -n > "$ou
 (
 	cd "$output_dir"
 	sha256sum chezmoi-* > SHA256SUMS
+	find dl/chezmoi -type f ! -name SHA256SUMS -print | LC_ALL=C sort | xargs sha256sum > dl/chezmoi/SHA256SUMS
 )
 
 cat > "$output_dir/manifest.json" <<EOF

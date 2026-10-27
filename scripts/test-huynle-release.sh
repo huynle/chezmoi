@@ -25,12 +25,20 @@ cd "$root"
 ./scripts/huynle-release.sh build v2.73.3-huynle.1 "$commit" "$epoch" "$tmp/two"
 diff -ru "$tmp/one" "$tmp/two"
 (cd "$tmp/one" && sha256sum -c SHA256SUMS)
-test "$(find "$tmp/one" -type f | wc -l)" -eq 15
+test "$(find "$tmp/one" -type f | wc -l)" -eq 22
 grep -q '"windows/arm64"' "$tmp/one/manifest.json"
+
+test -f "$tmp/one/dl/chezmoi/SHA256SUMS"
+test -f "$tmp/one/dl/chezmoi/linux/amd64"
+test -f "$tmp/one/dl/chezmoi/windows/arm64"
+(cd "$tmp/one" && sha256sum -c dl/chezmoi/SHA256SUMS)
+grep -q '  dl/chezmoi/linux/amd64$' "$tmp/one/dl/chezmoi/SHA256SUMS"
+grep -q '  dl/chezmoi/windows/arm64$' "$tmp/one/dl/chezmoi/SHA256SUMS"
 
 minisign -G -W -p "$tmp/test.pub" -s "$tmp/test.key" >/dev/null 2>&1
 pubkey=$(tail -n 1 "$tmp/test.pub")
-for file in "$tmp/one"/*; do
+find "$tmp/one" -type f ! -name '*.minisig' -print | LC_ALL=C sort | while IFS= read -r file; do
 	minisign -S -s "$tmp/test.key" -m "$file" -x "$file.minisig" -t 'throwaway test signature' < /dev/null
 	minisign -V -q -P "$pubkey" -m "$file" -x "$file.minisig"
 done
+test -f "$tmp/one/dl/chezmoi/SHA256SUMS.minisig"
