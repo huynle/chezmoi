@@ -43,8 +43,21 @@ done < "$tmp/one/dl/chezmoi/SHA256SUMS"
 
 minisign -G -W -p "$tmp/test.pub" -s "$tmp/test.key" >/dev/null 2>&1
 pubkey=$(tail -n 1 "$tmp/test.pub")
-find "$tmp/one" -type f ! -name '*.minisig' -print | LC_ALL=C sort | while IFS= read -r file; do
-	minisign -S -s "$tmp/test.key" -m "$file" -x "$file.minisig" -t 'throwaway test signature' < /dev/null
-	minisign -V -q -P "$pubkey" -m "$file" -x "$file.minisig"
-done
+./scripts/huynle-release.sh sign-package v2.73.3-huynle.1 "$epoch" "$tmp/one" "$tmp/test.key" "$pubkey"
+cp "$tmp/test.key" "$tmp/test-two.key"
+./scripts/huynle-release.sh sign-package v2.73.3-huynle.1 "$epoch" "$tmp/two" "$tmp/test-two.key" "$pubkey"
+
+archive=chezmoi-fleet-dl-2.73.3-huynle.1.tar.gz
+cmp "$tmp/one/$archive" "$tmp/two/$archive"
+minisign -V -q -P "$pubkey" -m "$tmp/one/$archive" -x "$tmp/one/$archive.minisig"
+(cd "$tmp/one" && sha256sum -c SHA256SUMS)
+grep -q "  $archive$" "$tmp/one/SHA256SUMS"
+grep -q '"fleet_dl_archive":"chezmoi-fleet-dl-2.73.3-huynle.1.tar.gz"' "$tmp/one/manifest.json"
+
+mkdir "$tmp/web-root"
+tar -xzf "$tmp/one/$archive" -C "$tmp/web-root"
+test -f "$tmp/web-root/dl/chezmoi/SHA256SUMS"
+test -f "$tmp/web-root/dl/chezmoi/SHA256SUMS.minisig"
+test -f "$tmp/web-root/dl/chezmoi/linux/amd64"
+minisign -V -q -P "$pubkey" -m "$tmp/web-root/dl/chezmoi/SHA256SUMS" -x "$tmp/web-root/dl/chezmoi/SHA256SUMS.minisig"
 test -f "$tmp/one/dl/chezmoi/SHA256SUMS.minisig"

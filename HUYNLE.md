@@ -10,7 +10,8 @@ than an upstream binary or package-manager build.
   amd64 and arm64.
 - Release binaries, archives, checksums, and the release manifest are signed
   with the fleet release minisign key.
-- The release artifact contains the fleet-server publication tree. Its stable
+- The durable GitHub asset `chezmoi-fleet-dl-<version>.tar.gz` contains the
+  signed fleet-server publication tree and is itself signed. Its stable
   contract is `/dl/chezmoi/SHA256SUMS`, `/dl/chezmoi/SHA256SUMS.minisig`, and
   `/dl/chezmoi/<os>/<arch>` (the Windows binary also has no `.exe` suffix in
   this HTTP contract). `SHA256SUMS` is global and names every served binary.
@@ -41,7 +42,15 @@ The code is pull-request ready when `go test ./...`, the release artifact test,
 The owner must first create and protect the `fleet-release` environment, load
 the production key and public-key variable, merge the reviewed code, create a
 new immutable Huynle tag on that merge, approve the environment deployment,
-and configure fleet-server to publish the signed `dist/dl/chezmoi` tree. Verify
+ and download and verify `chezmoi-fleet-dl-<version>.tar.gz` and its `.minisig`.
+ Deploy it directly into the fleet-server web root with exactly:
+
+```sh
+tar -xzf "chezmoi-fleet-dl-$VERSION.tar.gz" -C "$FLEET_SERVER_WEB_ROOT"
+```
+
+This yields `$FLEET_SERVER_WEB_ROOT/dl/chezmoi/...` without another directory
+move. Verify
 all three HTTP paths above before updating a fleet bundle pin.
 
 ### Upstream issue #3126 baseline

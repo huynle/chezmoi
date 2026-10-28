@@ -3,9 +3,43 @@
 set -eu
 
 usage() {
-	printf 'usage: %s build <tag> <commit> <source-date-epoch> <output-dir>\n' "$0" >&2
+	printf 'usage: %s build <tag> <commit> <source-date-epoch> <output-dir>\n       %s sign-package <tag> <source-date-epoch> <output-dir> <secret-key> <public-key>\n' "$0" "$0" >&2
 	exit 2
 }
+
+if [ "$#" -eq 6 ] && [ "$1" = sign-package ]; then
+	tag=$2
+	source_date_epoch=$3
+	output_dir=$4
+	secret_key=$5
+	public_key=$6
+	version=${tag#v}
+	archive="chezmoi-fleet-dl-$version.tar.gz"
+
+	find "$output_dir/dl/chezmoi" -type f ! -name '*.minisig' -print | LC_ALL=C sort | while IFS= read -r file; do
+		minisign -S -s "$secret_key" -m "$file" -x "$file.minisig" -t "chezmoi $version $(basename "$file")" < /dev/null
+		minisign -V -q -P "$public_key" -m "$file" -x "$file.minisig"
+	done
+	tar --sort=name --mtime="@$source_date_epoch" --owner=0 --group=0 --numeric-owner \
+		-C "$output_dir" -cf - dl | gzip -n > "$output_dir/$archive"
+	minisign -S -s "$secret_key" -m "$output_dir/$archive" -x "$output_dir/$archive.minisig" -t "chezmoi $version $archive" < /dev/null
+	minisign -V -q -P "$public_key" -m "$output_dir/$archive" -x "$output_dir/$archive.minisig"
+
+	tmp_manifest="$output_dir/manifest.json.tmp"
+	sed "s/}$/,\"fleet_dl_archive\":\"$archive\"}/" "$output_dir/manifest.json" > "$tmp_manifest"
+	mv "$tmp_manifest" "$output_dir/manifest.json"
+	(
+		cd "$output_dir"
+		manifest_tmp=$(mktemp)
+		find . -maxdepth 1 -type f ! -name '*.minisig' ! -name SHA256SUMS -printf '%f\n' | LC_ALL=C sort | xargs sha256sum > "$manifest_tmp"
+		mv "$manifest_tmp" SHA256SUMS
+	)
+	find "$output_dir" -maxdepth 1 -type f ! -name '*.minisig' -print | LC_ALL=C sort | while IFS= read -r file; do
+		minisign -S -s "$secret_key" -m "$file" -x "$file.minisig" -t "chezmoi $version $(basename "$file")" < /dev/null
+		minisign -V -q -P "$public_key" -m "$file" -x "$file.minisig"
+	done
+	exit 0
+fi
 
 [ "$#" -eq 5 ] || usage
 [ "$1" = build ] || usage
