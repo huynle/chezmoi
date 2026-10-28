@@ -28,6 +28,11 @@ if [ "$#" -eq 5 ] && [ "$1" = merge-native ]; then
  cp "$win_dir/windows-signing.json" "$output_dir/"
  rm -f "$output_dir"/chezmoi-darwin-*.tar.gz "$output_dir"/chezmoi-windows-*.tar.gz
  for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do os=${target%/*}; arch=${target#*/}; ext=; [ "$os" = windows ] && ext=.exe; stage=$(mktemp -d); cp "$output_dir/chezmoi-$os-$arch$ext" "$stage/chezmoi$ext"; cp LICENSE README.md "$stage/"; tar --sort=name --owner=0 --group=0 --numeric-owner -C "$stage" -cf - . | gzip -n > "$output_dir/chezmoi-$os-$arch.tar.gz"; rm -rf "$stage"; done
+ (
+  cd "$output_dir"
+  : > dl/chezmoi/SHA256SUMS
+  for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do os=${target%/*}; arch=${target#*/}; ext=; [ "$os" = windows ] && ext=.exe; digest=$(sha256sum "dl/chezmoi/$target" | cut -d ' ' -f 1); printf '%s  chezmoi-%s-%s%s\n' "$digest" "$os" "$arch" "$ext" >> dl/chezmoi/SHA256SUMS; done
+ )
  exit 0
 fi
 
