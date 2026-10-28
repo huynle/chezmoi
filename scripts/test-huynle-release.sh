@@ -12,11 +12,37 @@ if "$root/scripts/huynle-release.sh" build v2.73.3-huynle.1 "$root" 1 "$tmp/bad"
 fi
 grep -q 'invalid commit' "$tmp/error"
 
-if "$root/scripts/huynle-release.sh" build 2.73.3-huynle.1 deadbeef 1 "$tmp/bad" 2> "$tmp/error"; then
-	echo 'invalid tag unexpectedly accepted' >&2
-	exit 1
-fi
-grep -q 'invalid release tag' "$tmp/error"
+assert_invalid_tag() {
+	tag=$1
+	if "$root/scripts/huynle-release.sh" build "$tag" not-a-commit 1 "$tmp/bad" 2> "$tmp/error"; then
+		echo "invalid tag unexpectedly accepted: $tag" >&2
+		exit 1
+	fi
+	grep -q 'invalid release tag' "$tmp/error"
+
+	# Tag validation must also precede filesystem access and signing.
+	if "$root/scripts/huynle-release.sh" sign-package "$tag" 1 "$tmp/missing" "$tmp/missing.key" invalid-public-key 2> "$tmp/error"; then
+		echo "invalid sign-package tag unexpectedly accepted: $tag" >&2
+		exit 1
+	fi
+	grep -q 'invalid release tag' "$tmp/error"
+}
+
+for tag in \
+	2.73.3-huynle.1 \
+	v2x73.3-huynle.1 \
+	v2.73.3-huynle.1-trailing \
+	v2.73.3-huynle.-1 \
+	v2.73.3-huynle.01 \
+	v2.73.3-huynle. \
+	"v2.73.3-huynle.1
+injected"; do
+	assert_invalid_tag "$tag"
+done
+
+# Base version components intentionally allow leading zeros; release N does not.
+"$root/scripts/huynle-release.sh" build v02.073.003-huynle.1 not-a-commit 1 "$tmp/bad" 2> "$tmp/error" || true
+grep -q 'invalid commit' "$tmp/error"
 
 commit=$(git -C "$root" rev-parse HEAD)
 epoch=$(git -C "$root" show -s --format=%ct "$commit")

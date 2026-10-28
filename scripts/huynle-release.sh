@@ -7,8 +7,18 @@ usage() {
 	exit 2
 }
 
+validate_tag() {
+	# Base version components allow leading zeros; the Huynle release does not.
+	validated=$(printf '%s\n' "$1" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-huynle\.[1-9][0-9]*$' || true)
+	if [ "$validated" != "$1" ]; then
+		printf 'invalid release tag: %s (expected vX.Y.Z-huynle.N)\n' "$1" >&2
+		exit 1
+	fi
+}
+
 if [ "$#" -eq 6 ] && [ "$1" = sign-package ]; then
 	tag=$2
+	validate_tag "$tag"
 	source_date_epoch=$3
 	output_dir=$4
 	secret_key=$5
@@ -45,17 +55,11 @@ fi
 [ "$1" = build ] || usage
 
 tag=$2
+validate_tag "$tag"
 commit=$3
 source_date_epoch=$4
 output_dir=$5
 
-case "$tag" in
-	v[0-9]*.[0-9]*.[0-9]*-huynle.[0-9]*) ;;
-	*)
-		printf 'invalid release tag: %s (expected vX.Y.Z-huynle.N)\n' "$tag" >&2
-		exit 1
-		;;
-esac
 version=${tag#v}
 
 case "$commit" in
