@@ -1,0 +1,123 @@
+name: Huynle release
+
+on:
+  push:
+    tags: ["v*.*.*-huynle.*"]
+
+permissions: {}
+
+concurrency:
+  group: huynle-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Validate tag and ancestry
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-huynle\.[0-9]+$' || exit 1
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Test and build release assets
+        run: |
+          set -eu
+          # issue3126.txtar greps rendered template data for "foo" and "bar";
+          # pin the kernel hostname so host metadata cannot cause a false match.
+          old_hostname=$(hostname)
+          sudo hostname chezmoi-ci
+          sudo sed -i "s/$old_hostname/chezmoi-ci/g" /etc/hosts /etc/hostname
+          go test ./...
+          epoch=$(git show -s --format=%ct "$GITHUB_SHA")
+          scripts/huynle-release.sh build "$GITHUB_REF_NAME" "$GITHUB_SHA" "$epoch" dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: fleet-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unsigned
+          path: dist
+      - name: Install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: Sign canonical tree and package release assets
+        env:
+          MINISIGN_KEY: ${{ secrets.FLEET_RELEASE_MINISIGN_KEY }}
+          RELEASE_PUBKEY: ${{ vars.FLEET_RELEASE_PUBKEY }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          umask 077
+          key="$RUNNER_TEMP/release.key"
+          trap 'rm -f "$key"' EXIT
+          test -n "$MINISIGN_KEY"
+          printf '%s\n' "$RELEASE_PUBKEY" | grep -Eq '^RW[A-Za-z0-9+/]{54}$'
+          printf '%s\n' "$MINISIGN_KEY" > "$key"
+          minisign -R -s "$key" -p "$RUNNER_TEMP/derived.pub" < /dev/null >/dev/null
+          test "$(tail -n 1 "$RUNNER_TEMP/derived.pub")" = "$RELEASE_PUBKEY"
+          printf 'untrusted comment: fleet release public key\n%s\n' "$RELEASE_PUBKEY" > dist/release.pub
+          epoch=$(git show -s --format=%ct "$GITHUB_SHA")
+          scripts/huynle-release.sh sign-package "v$VERSION" "$epoch" dist "$key" "$RELEASE_PUBKEY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [build, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed
+          path: dist
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -eu
+          archive="dist/chezmoi-fleet-dl-$VERSION.tar.gz"
+          test -f "$archive"
+          test -f "$archive.minisig"
+          grep -Fq "  $(basename "$archive")" dist/SHA256SUMS
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "chezmoi $VERSION" \
+            --notes "Huynle fleet build from source. Unpack the signed fleet-dl archive directly into the fleet-server web root. Verify SHA256SUMS and all .minisig files with release.pub." \
+            dist/chezmoi-* dist/manifest.json dist/manifest.json.minisig \
+            dist/release.pub dist/release.pub.minisig dist/SHA256SUMS dist/SHA256SUMS.minisig
