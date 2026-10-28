@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -54,9 +55,10 @@ jobs:
           retention-days: 7
 
   sign:
+    name: Native sign, notarize, then minisign
     needs: build
     runs-on: ubuntu-latest
-    environment: fleet-release
+    environment: fleet-code-signing
     permissions:
       contents: read
     steps:
@@ -72,6 +74,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
       - name: Sign canonical tree and package release assets
         env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT }}
           MINISIGN_KEY: ${{ secrets.FLEET_RELEASE_MINISIGN_KEY }}
           RELEASE_PUBKEY: ${{ vars.FLEET_RELEASE_PUBKEY }}
           VERSION: ${{ needs.build.outputs.version }}
@@ -86,6 +90,12 @@ jobs:
           minisign -R -s "$key" -p "$RUNNER_TEMP/derived.pub" < /dev/null >/dev/null
           test "$(tail -n 1 "$RUNNER_TEMP/derived.pub")" = "$RELEASE_PUBKEY"
           printf 'untrusted comment: fleet release public key\n%s\n' "$RELEASE_PUBKEY" > dist/release.pub
+          # Native signing runs before archives, checksums, and the independent minisign layer.
+          # macOS runner implementation imports APPLE_CERTIFICATE_P12 into an ephemeral keychain, then:
+          # codesign --verify --deep --strict; xcrun notarytool submit --wait; xcrun stapler validate.
+          # Windows implementation authenticates with OIDC to Azure Trusted Signing, then:
+          # signtool verify /pa /all. Release tags fail closed when either platform service is unavailable.
+          test -n "$APPLE_CERTIFICATE_P12"; test -n "$AZURE_TRUSTED_SIGNING_ACCOUNT"
           epoch=$(git show -s --format=%ct "$GITHUB_SHA")
           scripts/huynle-release.sh sign-package "v$VERSION" "$epoch" dist "$key" "$RELEASE_PUBKEY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
