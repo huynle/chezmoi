@@ -87,3 +87,24 @@ test -f "$tmp/web-root/dl/chezmoi/SHA256SUMS.minisig"
 test -f "$tmp/web-root/dl/chezmoi/linux/amd64"
 minisign -V -q -P "$pubkey" -m "$tmp/web-root/dl/chezmoi/SHA256SUMS" -x "$tmp/web-root/dl/chezmoi/SHA256SUMS.minisig"
 test -f "$tmp/one/dl/chezmoi/SHA256SUMS.minisig"
+
+# Native replacement must regenerate canonical checksums from signed bytes.
+cp -a "$tmp/two" "$tmp/native-base"
+mkdir "$tmp/mac-native" "$tmp/win-native"
+for arch in amd64 arm64; do
+ printf 'signed-mac-%s\n' "$arch" > "$tmp/mac-native/chezmoi-darwin-$arch"
+ printf 'signed-win-%s\n' "$arch" > "$tmp/win-native/chezmoi-windows-$arch.exe"
+ : > "$tmp/mac-native/chezmoi-darwin-$arch.dmg"
+done
+printf '{}\n' > "$tmp/mac-native/apple-signing.ndjson"
+printf '{}\n' > "$tmp/win-native/windows-signing.json"
+old=$(grep 'chezmoi-darwin-amd64$' "$tmp/native-base/dl/chezmoi/SHA256SUMS" | cut -d' ' -f1)
+./scripts/huynle-release.sh merge-native "$tmp/native-base" "$tmp/mac-native" "$tmp/win-native" 2.73.3-huynle.1
+new=$(grep 'chezmoi-darwin-amd64$' "$tmp/native-base/dl/chezmoi/SHA256SUMS" | cut -d' ' -f1)
+test "$old" != "$new"
+test "$new" = "$(sha256sum "$tmp/native-base/dl/chezmoi/darwin/amd64" | cut -d' ' -f1)"
+tar -xOf "$tmp/native-base/chezmoi-darwin-amd64.tar.gz" ./chezmoi > "$tmp/from-platform"
+cmp "$tmp/from-platform" "$tmp/mac-native/chezmoi-darwin-amd64"
+./scripts/huynle-release.sh sign-package v2.73.3-huynle.1 "$epoch" "$tmp/native-base" "$tmp/test.key" "$pubkey"
+mkdir "$tmp/native-unpack"; tar -xzf "$tmp/native-base/$archive" -C "$tmp/native-unpack"
+cmp "$tmp/native-unpack/dl/chezmoi/windows/arm64" "$tmp/win-native/chezmoi-windows-arm64.exe"

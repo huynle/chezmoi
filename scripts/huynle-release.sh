@@ -16,6 +16,26 @@ validate_tag() {
 	fi
 }
 
+if [ "$#" -eq 5 ] && [ "$1" = merge-native ]; then
+ output_dir=$2; mac_dir=$3; win_dir=$4; version=$5
+ for arch in amd64 arm64; do
+  cp "$mac_dir/chezmoi-darwin-$arch" "$output_dir/chezmoi-darwin-$arch"
+  cp "$mac_dir/chezmoi-darwin-$arch" "$output_dir/dl/chezmoi/darwin/$arch"
+  cp "$win_dir/chezmoi-windows-$arch.exe" "$output_dir/chezmoi-windows-$arch.exe"
+  cp "$win_dir/chezmoi-windows-$arch.exe" "$output_dir/dl/chezmoi/windows/$arch"
+ done
+ cp "$mac_dir"/*.dmg "$mac_dir/apple-signing.ndjson" "$output_dir/"
+ cp "$win_dir/windows-signing.json" "$output_dir/"
+ rm -f "$output_dir"/chezmoi-darwin-*.tar.gz "$output_dir"/chezmoi-windows-*.tar.gz
+ for target in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do os=${target%/*}; arch=${target#*/}; ext=; [ "$os" = windows ] && ext=.exe; stage=$(mktemp -d); cp "$output_dir/chezmoi-$os-$arch$ext" "$stage/chezmoi$ext"; cp LICENSE README.md "$stage/"; tar --sort=name --owner=0 --group=0 --numeric-owner -C "$stage" -cf - . | gzip -n > "$output_dir/chezmoi-$os-$arch.tar.gz"; rm -rf "$stage"; done
+ (
+  cd "$output_dir"
+  : > dl/chezmoi/SHA256SUMS
+  for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do os=${target%/*}; arch=${target#*/}; ext=; [ "$os" = windows ] && ext=.exe; digest=$(sha256sum "dl/chezmoi/$target" | cut -d ' ' -f 1); printf '%s  chezmoi-%s-%s%s\n' "$digest" "$os" "$arch" "$ext" >> dl/chezmoi/SHA256SUMS; done
+ )
+ exit 0
+fi
+
 if [ "$#" -eq 6 ] && [ "$1" = sign-package ]; then
 	tag=$2
 	validate_tag "$tag"

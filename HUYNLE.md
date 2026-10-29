@@ -92,3 +92,9 @@ Once a month, review upstream releases and security notices, then explicitly:
 
 If a release fails, fix it by pull request and increment `N`; do not move or
 replace the failed tag.
+
+## Native platform trust
+
+Huynle release tags use the reviewer-protected `fleet-code-signing` environment. PRs only exercise reproducible unsigned builds and receive no credentials. macOS binaries require a Developer ID Application P12 (`APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`), App Store Connect notary API key (`APPLE_API_PRIVATE_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`), and `APPLE_TEAM_ID`/`APPLE_SIGNING_IDENTITY`. Windows uses Azure Trusted Signing OIDC (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`) and the account/endpoint/profile variables; expected publisher and thumbprint are public variables. Revoke and rotate through Apple Developer or Azure, update the environment, and issue a new release. No private key is stored in Git.
+
+The pipeline signs native binaries before packaging, SHA-256, and Ed25519 minisign. Signed output is nondeterministic; unsigned build artifacts remain reproducible. Release metadata records Apple team/identity and Windows publisher/thumbprint. An owner must validate installation on stock online/offline Gatekeeper macOS and stock Windows 11 SmartScreen before real-user rollout.
