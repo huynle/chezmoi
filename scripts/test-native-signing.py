@@ -11,10 +11,10 @@ assert j['sign']['environment']=='fleet-release' and set(j['sign']['needs'])=={'
 final='\n'.join(str(x.get('run','')) for x in j['sign']['steps']); assert 'merge-native' in final and final.index('merge-native') < final.index('sign-package')
 
 for name,job in j.items():
- env=set()
- if isinstance(job.get("env"),dict): env.update(job["env"])
- for step in job.get("steps",[]):
-  if isinstance(step.get("env"),dict): env.update(step["env"])
-  run=str(step.get("run",""))
-  for var in ("APPLE_CERTIFICATE_P12","AZURE_TRUSTED_SIGNING_ACCOUNT"):
-   if f"${var}" in run: assert var in env,(name,var)
+    env=set()
+    if isinstance(job.get("env"),dict): env.update(job["env"])
+    for step in job.get("steps",[]):
+        if isinstance(step.get("env"),dict): env.update(step["env"])
+        run=str(step.get("run",""))
+        for var in ("APPLE_CERTIFICATE_P12","AZURE_TRUSTED_SIGNING_ACCOUNT"):
+            if f"${var}" in run: assert var in env,(name,var)
