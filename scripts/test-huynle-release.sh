@@ -92,9 +92,9 @@ test -f "$tmp/one/dl/chezmoi/SHA256SUMS.minisig"
 cp -a "$tmp/two" "$tmp/native-base"
 mkdir "$tmp/mac-native" "$tmp/win-native"
 for arch in amd64 arm64; do
- printf 'signed-mac-%s\n' "$arch" > "$tmp/mac-native/chezmoi-darwin-$arch"
- printf 'signed-win-%s\n' "$arch" > "$tmp/win-native/chezmoi-windows-$arch.exe"
- : > "$tmp/mac-native/chezmoi-darwin-$arch.dmg"
+	printf 'signed-mac-%s\n' "$arch" > "$tmp/mac-native/chezmoi-darwin-$arch"
+	printf 'signed-win-%s\n' "$arch" > "$tmp/win-native/chezmoi-windows-$arch.exe"
+	: > "$tmp/mac-native/chezmoi-darwin-$arch.dmg"
 done
 printf '{}\n' > "$tmp/mac-native/apple-signing.ndjson"
 printf '{}\n' > "$tmp/win-native/windows-signing.json"
